@@ -3,10 +3,11 @@ ARKA IAN GOSWAMI
 #include "mbed.h"
 #include "QEI.h"
 
-const double Kd = 0.05; // Derivative gain
+
 QEI encoderR(PB_1, PC_4, NC, 256);
 QEI encoderL(PA_2, PA_3, NC, 256);
 
+const double Kd = 0.05; // Derivative gain
 const double Ki = 0.01; // Integral gain
 const double Kp = 0.1; // Proportional gain
 const int NUM_SENSORS = 5; // Number of line sensors
