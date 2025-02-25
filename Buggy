@@ -1,0 +1,94 @@
+#include "mbed.h"
+#include "QEI.h"
+#include "Serial.h"
+#include "Motor.h"
+#include "Bluetooth.h"
+#include "PID.h"
+#include "Sensor.h"
+#include "Encoder.h"
+
+class Robot {
+public:
+    Motor leftMotor, rightMotor;
+    Encoder leftEncoder, rightEncoder;
+    Sensor leftSensor, leftSensor1, middleSensor, rightSensor, rightSensor1;
+    PID pid;
+    Bluetooth bt;
+    DigitalOut L1, L2, L3, L4, L5, Bipolar1, Bipolar2;
+    Serial pc;
+    
+    float baseSpeedL, baseSpeedR;
+    const float maxSpeed = 0.95f, minSpeed = 0.6f;
+    
+    Robot(float Kp, float Ki, float Kd, float baseSpeedL = 0.825f, float baseSpeedR = 0.825f, float dt = 0.005f) 
+        : leftMotor(PC_7, PB_9), rightMotor(PA_9, PB_9),
+          leftEncoder(PC_0, PC_4, 512), rightEncoder(PC_8, PA_10, 512),
+          leftSensor(A4), leftSensor1(A3), middleSensor(A2), rightSensor(A1), rightSensor1(A0),
+          pid(Kp, Ki, Kd, dt), bt(PA_11, PA_12),
+          L1(PB_13), L2(PB_14), L3(PB_15), L4(PB_1), L5(PB_2), Bipolar1(PB_8), Bipolar2(PA_6),
+          pc(USBTX, USBRX),
+          baseSpeedL(baseSpeedL), baseSpeedR(baseSpeedR) {
+        pc.baud(9600);
+        bt.setCallback(callback(this, &Robot::btInterruptHandler));
+    }
+    
+    // Handles data received from the Bluetooth module
+    void btInterruptHandler(char s) {
+        pc.putc(s);
+        if (s == '1') {
+            enableMotors();
+            leftMotor.setSpeed(0.7);
+            rightMotor.setSpeed(0.15);
+            wait(0.35);
+            while (middleSensor.read() < 0.12) {
+                leftMotor.setSpeed(0.7);
+                rightMotor.setSpeed(0.15);
+            }
+            leftMotor.setSpeed(0.5);
+            rightMotor.setSpeed(0.5);
+        } else if (s == '0') {
+            disableMotors();
+        }
+    }
+    
+    void enableMotors() {
+        leftMotor.enable = 1;
+        rightMotor.enable = 1;
+    }
+    
+    void disableMotors() {
+        leftMotor.enable = 0;
+        rightMotor.enable = 0;
+    }
+    
+    float calculateError(float left, float left1, float right, float right1) {
+        return (left + left1) - (right + right1);
+    }
+    
+    void run() {
+        while (1) {
+            float sLeft = leftSensor.read();
+            float sLeft1 = leftSensor1.read();
+            float sMiddle = middleSensor.read();
+            float sRight = rightSensor.read();
+            float sRight1 = rightSensor1.read();
+            
+            float error = calculateError(sLeft, sLeft1, sRight, sRight1);
+            float pidOutput = pid.compute(0.0f, error);
+            
+            float leftSpeed = baseSpeedL - pidOutput;
+            float rightSpeed = baseSpeedR + pidOutput;
+            
+            leftMotor.setSpeed(leftSpeed);
+            rightMotor.setSpeed(rightSpeed);
+            wait(pid.dt);
+            leftEncoder.reset();
+            rightEncoder.reset();
+        }
+    }
+};
+
+int main() {
+    Robot robot(4.25f, 0.45f, 0.275f); // Set PID constants dynamically
+    robot.run();
+}
